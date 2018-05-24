@@ -4,12 +4,19 @@ const mainWindow = mainWindows[0];
 let mini = false;
 Emitter.on('mini', (event, state) => {
   mini = state.state;
+  event.returnValue = null; // eslint-disable-line
 });
 
 let resizeTimer;
 
 const _save = () => {
   if (!mini) {
+    if (mainWindow.isFullScreen()) {
+      Settings.set('fullscreen', true);
+      return;
+    }
+    Settings.set('fullscreen', false);
+
     if (mainWindow.isMaximized()) {
       Settings.set('maximized', true);
     } else {
@@ -40,6 +47,8 @@ mainWindow.on('maximize', (ev) => {
   _save();
 });
 mainWindow.on('unmaximize', _save);
+mainWindow.on('enter-full-screen', _save);
+mainWindow.on('leave-full-screen', () => setTimeout(_save, 1000));
 
 Emitter.on('eq:change', (event, details) => {
   const eq = Settings.get('eq', [1, 1, 1, 1, 1, 1]);

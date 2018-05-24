@@ -39,11 +39,21 @@ class Settings {
 
   set(key, value) {
     if (this.coupled) {
-      if (this._hooks[key] && this.data[key] !== value) {
+      const valChanged = this.data[key] !== value;
+      this.data[key] = value;
+      if (this._hooks[key] && valChanged) {
         this._hooks[key].forEach((hookFn) => hookFn(value));
       }
-      this.data[key] = value;
-      this._save();
+      if (!['position', 'size', 'mini-position', 'mini-size'].includes(key)) {
+        Emitter.sendToAll(`settings:change:${key}`, value, key);
+        Emitter.sendToGooglePlayMusic(`settings:change:${key}`, value, key);
+      }
+      if (valChanged) this._save();
+    } else {
+      Emitter.fire('settings:set', {
+        key,
+        value,
+      });
     }
   }
 
@@ -54,17 +64,17 @@ class Settings {
     } catch (e) {
       if (retryCount > 0) {
         setTimeout(this._load.bind(this, retryCount - 1), 10);
-        Logger.error('Failed to load settings JSON file, retyring in 10 milliseconds');
+        if (global.Logger) Logger.error('Failed to load settings JSON file, retrying in 10 milliseconds');
         return;
       }
       userSettings = {};
-      Logger.error('Failed to load settings JSON file, giving up and resetting');
+      if (global.Logger) Logger.error('Failed to load settings JSON file, giving up and resetting');
     }
     this.data = _.extend({}, initalSettings, userSettings);
   }
 
   _save(force) {
-    const now = (new Date).getTime();
+    const now = (new Date()).getTime();
     // During some save events (like resize) we need to queue the disk writes
     // so that we don't blast the disk every millisecond
     if ((now - this.lastSync > 250 || force)) {
@@ -86,7 +96,7 @@ class Settings {
 
   destroy() {
     this.data = null;
-    fs.unlinkSync(this.PATH);
+    if (this.coupled && fs.existsSync(this.PATH)) fs.unlinkSync(this.PATH);
   }
 }
 

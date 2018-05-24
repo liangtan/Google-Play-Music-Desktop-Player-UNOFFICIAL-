@@ -31,6 +31,15 @@ const template = [
     label: 'View',
     submenu: [
       {
+        label: 'Reload',
+        accelerator: 'CmdOrCtrl+R',
+        click: (item, focusedWindow) => {
+          if (focusedWindow) {
+            focusedWindow.reload();
+          }
+        },
+      },
+      {
         label: 'Toggle Full Screen',
         accelerator: (() => {
           if (process.platform === 'darwin') return 'Ctrl+Command+F';
@@ -44,10 +53,27 @@ const template = [
         },
       },
       {
+        label: 'Previous Page',
+        accelerator: 'CmdOrCtrl+[',
+        click: () => Emitter.sendToGooglePlayMusic('GPMNav:Back'),
+      },
+      {
+        label: 'Next Page',
+        accelerator: 'CmdOrCtrl+]',
+        click: () => Emitter.sendToGooglePlayMusic('GPMNav:Forward'),
+      },
+      {
         label: 'Go to URL',
         accelerator: 'CmdOrCtrl+Shift+G',
         click: () => {
           Emitter.sendToWindowsOfName('main', 'gotourl');
+        },
+      },
+      {
+        label: 'Show Album Cover',
+        accelerator: 'CmdOrCtrl+Shift+C',
+        click: () => {
+          Emitter.sendToGooglePlayMusic('cover:show');
         },
       },
       {
@@ -106,7 +132,7 @@ const template = [
       },
       {
         label: 'Close',
-        accelerator: 'CmdOrCtrl+W',
+        accelerator: process.platform === 'linux' ? 'CmdOrCtrl+Q' : 'CmdOrCtrl+W',
         role: 'close',
       },
     ],

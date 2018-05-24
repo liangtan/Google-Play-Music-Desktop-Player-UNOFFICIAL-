@@ -1,6 +1,21 @@
 node_modules/
 build/
 dist/
+cov/
+coverage/
 .settings.json
 xunit.xml
 vendor/*.msi
+electron.xml
+spectron.xml
+coverage.zip
+uwp/
+
+# snapcraft
+prime/
+snapcraft/
+parts/
+stage/
+snap/
+*.snap
+

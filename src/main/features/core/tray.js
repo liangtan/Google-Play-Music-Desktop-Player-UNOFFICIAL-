@@ -6,6 +6,47 @@ import { showDesktopSettings } from './desktopSettings';
 let appIcon = null;
 const mainWindow = WindowManager.getAll('main')[0];
 
+const trayNormalPath = `${__dirname}/../../../assets/img/`;
+const trayPausedPath = `${__dirname}/../../../assets/img/paused/`;
+const trayPlayingPath = `${__dirname}/../../../assets/img/playing/`;
+
+let currentIconPath = trayNormalPath;
+let appIconInvert = Settings.get('appIconInvert', false);
+
+function getAppIconFileName() {
+  let appIconFileName;
+  if (process.platform === 'darwin') {
+    appIconFileName = 'macTemplate.png';
+  } else if (WindowManager.getWindowManagerGDMName() === 'kde-plasma') {
+    // TODO: Change this back to ico when electron supports it on linux
+    // appIconFileName = 'main.ico';
+    appIconFileName = 'main_tray_white_s.png';
+  } else if (process.platform === 'linux') {
+    appIconFileName = appIconInvert ? 'main_tray_black_s.png' : 'main_tray_white_s.png';
+  } else {
+    appIconFileName = 'main_tray_s.png';
+  }
+  return path.resolve(currentIconPath, appIconFileName);
+}
+
+const getTrackString = (track) => {
+  let title = track.title;
+  const artist = track.artist;
+
+  if (title.length + artist.length > 40) {
+    title = `${title.substring(0, 40 - (artist.length + 6))}...`;
+  }
+
+  let trackString = `${title} - ${artist}`;
+
+  // fix display of ampersands on windows
+  if (process.platform === 'win32') {
+    trackString = trackString.replace('&', '&&');
+  }
+
+  return trackString;
+};
+
 let audioDeviceMenu = [
   {
     label: TranslationProvider.query('label-loading-devices'),
@@ -13,25 +54,41 @@ let audioDeviceMenu = [
   },
 ];
 
-if (process.platform === 'darwin') {
-  appIcon = new Tray(path.resolve(`${__dirname}/../../../assets/img/macTemplate.png`));
-} else {
-  if (WindowManager.getWindowManagerGDMName() === 'kde-plasma') {
-    // TODO: Change this back to ico when electron supports it on linux
-    // appIcon = new Tray(path.resolve(`${__dirname}/../../../assets/img/main.ico`));
-    appIcon = new Tray(path.resolve(`${__dirname}/../../../assets/img/main_tray.png`));
-  } else {
-    appIcon = new Tray(path.resolve(`${__dirname}/../../../assets/img/main_tray.png`));
-  }
-}
+appIcon = new Tray(getAppIconFileName());
 
-const setContextMenu = () => {
+Settings.onChange('appIconInvert', (newValue) => {
+  appIconInvert = newValue;
+  if (appIcon) appIcon.setImage(getAppIconFileName());
+});
+
+// Change the icon if the music is playing
+Emitter.on('playback:isPlaying', () => {
+  currentIconPath = trayPlayingPath;
+  if (appIcon) appIcon.setImage(getAppIconFileName());
+});
+
+// Change the icon is the music is paused
+Emitter.on('playback:isPaused', () => {
+  currentIconPath = trayPausedPath;
+  if (appIcon) appIcon.setImage(getAppIconFileName());
+});
+
+// Change the icon is the music is stopped
+Emitter.on('playback:isStopped', () => {
+  currentIconPath = trayNormalPath;
+  if (appIcon) appIcon.setImage(getAppIconFileName());
+});
+
+const setContextMenu = (track) => {
   const contextMenu = Menu.buildFromTemplate([
     { label: TranslationProvider.query('tray-label-show'),
       click: () => {
         mainWindow.setSkipTaskbar(false);
         mainWindow.show();
       },
+    },
+    { label: track ? getTrackString(track) : TranslationProvider.query('playback-os-no-track-playing'),
+      enabled: false,
     },
     { type: 'separator' },
     {
@@ -68,6 +125,8 @@ const setContextMenu = () => {
           label: TranslationProvider.query('label-about'),
           click: () => {
             Emitter.sendToWindowsOfName('main', 'about');
+            mainWindow.setSkipTaskbar(false);
+            mainWindow.show();
           },
         },
         {
@@ -86,11 +145,11 @@ const setContextMenu = () => {
     },
     { label: TranslationProvider.query('label-desktop-settings'), click: () => { showDesktopSettings(); } },
     { type: 'separator' },
-    { label: TranslationProvider.query('label-quit'), click: () => { global.quiting = true; app.quit(); } },
+    { label: TranslationProvider.query('label-quit'), click: () => { global.quitting = true; app.quit(); } },
   ]);
-  appIcon.setContextMenu(contextMenu);
+  if (appIcon) appIcon.setContextMenu(contextMenu);
 };
-setContextMenu();
+setContextMenu(null);
 
 
 global.wasMaximized = Settings.get('maximized', false);
@@ -100,6 +159,7 @@ function toggleMainWindow() {
   // the mainWindow variable will be GC'd
   // we must find the window ourselves
   const win = WindowManager.getAll('main')[0];
+  if (!win) return;
 
   if (win.isMinimized() || !win.isVisible()) {
     win.setSkipTaskbar(false);
@@ -120,7 +180,7 @@ function toggleMainWindow() {
   }
 }
 
-appIcon.setToolTip('Google Play Music Desktop Player');
+if (appIcon) appIcon.setToolTip('Google Play Music Desktop Player');
 
 switch (process.platform) {
   case 'darwin': // <- actually means OS-X
@@ -177,8 +237,12 @@ Emitter.on('audiooutput:list', (event, devices) => {
       });
     }
   });
-  setContextMenu();
+  setContextMenu(PlaybackAPI.currentSong());
 });
 
 Emitter.sendToGooglePlayMusic('audiooutput:fetch');
 Emitter.on('audiooutput:set', () => Emitter.sendToGooglePlayMusic('audiooutput:fetch'));
+
+PlaybackAPI.on('change:track', (track) => {
+  setContextMenu(track);
+});

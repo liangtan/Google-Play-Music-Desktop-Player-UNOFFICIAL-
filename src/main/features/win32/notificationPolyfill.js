@@ -21,7 +21,7 @@ class Notification {
       backgroundColor: '#FFF',
       webPreferences: {
         nodeIntegration: true,
-        preload: path.resolve('./build/inject/generic/index.js'),
+        preload: path.resolve('./build/renderer/generic/index.js'),
       },
     });
 
@@ -29,7 +29,7 @@ class Notification {
 
     const windowID = WindowManager.add(this.window, 'notify');
     Emitter.executeOnWindow(windowID, (opts) => {
-      window.NOTIFY_DATA = opts;
+      window.NOTIFY_DATA = opts; // eslint-disable-line
     }, this.options);
 
     setTimeout(() => {

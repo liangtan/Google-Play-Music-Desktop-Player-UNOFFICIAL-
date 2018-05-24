@@ -1,5 +1,4 @@
 import { app, BrowserWindow } from 'electron';
-import { argv } from 'yargs';
 import path from 'path';
 import ua from 'universal-analytics';
 import uuid from 'uuid';
@@ -15,9 +14,11 @@ import WindowManagerClass from './main/utils/WindowManager';
 import PlaybackAPIClass from './main/utils/PlaybackAPI';
 import I3IpcHelperClass from './main/utils/I3IpcHelper';
 
-import './inject/generic/translations';
-
 import handleStartupEvent from './squirrel';
+
+import { updateShortcuts } from './main/utils/_shortcutManager';
+
+app.setAppUserModelId('com.marshallofsound.gpmdp.core');
 
 (() => {
   if (handleStartupEvent()) {
@@ -44,17 +45,15 @@ import handleStartupEvent from './squirrel';
     return;
   }
 
-  if (process.env.TEST_SPEC) {
+  if (process.env['TEST_SPEC']) { // eslint-disable-line
     global.Settings = new SettingsClass('.test', true);
   } else {
     global.Settings = new SettingsClass();
   }
 
-  global.DEV_MODE = process.env['TEST_SPEC'] || argv.development || argv.dev; // eslint-disable-line
-  if (Settings.get('START_IN_DEV_MODE', false)) {
-    global.DEV_MODE = true;
-    Settings.set('START_IN_DEV_MODE', false);
-  }
+  global.DEV_MODE = process.env['TEST_SPEC'] || process.argv.some(arg => arg === '--development') || process.argv.some(arg => arg === '--dev'); // eslint-disable-line
+
+  updateShortcuts();
 
   // Initialize the logger with some default logging levels.
   const defaultFileLogLevel = 'info';
@@ -62,7 +61,7 @@ import handleStartupEvent from './squirrel';
   global.Logger = new (winston.Logger)({
     transports: [
       new (winston.transports.File)({
-        filename: path.resolve(app.getPath('userData'), 'gpmdc.log'),
+        filename: path.resolve(app.getPath('userData'), 'gpmdp.log'),
         level: defaultFileLogLevel,
         maxsize: 5000000,
         maxfiles: 2,
@@ -85,10 +84,7 @@ import handleStartupEvent from './squirrel';
   // This is for user reporting
   Settings.set('uuid', Settings.get('uuid', uuid.v4()));
   const user = ua('UA-44220619-5', Settings.get('uuid'));
-  setInterval((function sendPageView() {
-    user.pageview('/').send();
-    return sendPageView;
-  }()), 60000 * 5);
+  user.pageview(`/${app.getVersion()}`).send();
 
   // Replace the logger's levels with those from settings.
   Logger.transports.console.level = Settings.get('consoleLogLevel', defaultConsoleLogLevel);
@@ -128,8 +124,19 @@ import handleStartupEvent from './squirrel';
 
     // and load the index.html of the app.
     mainWindow.loadURL(`file://${__dirname}/public_html/index.html`);
+
+    require('./renderer/generic/translations');
     require('./main/features');
     require('./old_win32');
+
+    // Proxy window events through IPC to solve 'webContents destroyed' errors
+    const proxyWindowEvent = (name) => {
+      mainWindow.on(name, (...args) => Emitter.sendToGooglePlayMusic(`BrowserWindow:${name}`, ...args));
+    };
+    proxyWindowEvent('app-command');
+    proxyWindowEvent('swipe');
+    proxyWindowEvent('scroll-touch-begin');
+    proxyWindowEvent('scroll-touch-end');
 
     // Emitted when the window is closed.
     mainWindow.on('closed', () => {
@@ -147,6 +154,6 @@ import handleStartupEvent from './squirrel';
 
   app.on('before-quit', () => {
     Logger.info('Application exiting...');
-    global.quiting = true;
+    global.quitting = true;
   });
 })();

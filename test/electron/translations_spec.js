@@ -1,14 +1,15 @@
 // Pre-run
+import { app } from 'electron';
 import chai from 'chai';
 import chaiFs from 'chai-fs';
 import fs from 'fs';
 import path from 'path';
 
-chai.use(chaiFs);
-chai.should();
-
 // Actual Test Imports
 import TranslationProvider from '../../build/_locales/_provider';
+
+chai.use(chaiFs);
+chai.should();
 
 describe('Translations', () => {
   let provider;
@@ -29,13 +30,20 @@ describe('Translations', () => {
     provider.query('label-magical-unicorn').should.be.equal(TranslationProvider.UNKNOWN);
   });
 
+  it('should default to en-US if the current locale does not exist', () => {
+    const _getLocale = app.getLocale;
+    app.getLocale = () => 'zb-FQ';
+    provider = new TranslationProvider();
+    provider.t.should.be.deep.equal(provider._t);
+    app.getLocale = _getLocale;
+  });
+
 
   const files = fs.readdirSync(path.resolve('./src/_locales'));
-  const isJSON = /.*\.json$/gi;
   const baseKeys = Object.keys(JSON.parse(fs.readFileSync(path.resolve('./src/_locales/en-US.json'), 'utf8')));
 
   files.forEach((file) => {
-    if (isJSON.test(file)) {
+    if (/.*\.json$/gi.test(file)) {
       const filePath = path.resolve(`./src/_locales/${file}`);
 
       describe(file, () => {
@@ -47,6 +55,13 @@ describe('Translations', () => {
           const locale = JSON.parse(fs.readFileSync(filePath, 'utf8'));
           baseKeys.forEach((key) => {
             locale.should.have.property(key);
+          });
+        });
+
+        it('shouldn\'t have extra translation keys compared to en-US', () => {
+          const locale = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+          Object.keys(locale).forEach((key) => {
+            baseKeys.should.contain(key);
           });
         });
       });

@@ -36,6 +36,7 @@ const setUpAutoUpdate = () => {
     let update = false;
     autoUpdater.on('update-downloaded', () => {
       Logger.info('Auto updater - update downloaded.');
+      Emitter.sendToGooglePlayMusic('playback:miniDisable');
       Emitter.sendToAll('update:available');
       update = true;
     });
@@ -44,7 +45,7 @@ const setUpAutoUpdate = () => {
       Logger.info('Auto updater - update triggered.');
       if (update) {
         Logger.info('Auto updater - quitting to install.');
-        global.quiting = true;
+        global.quitting = true;
         autoUpdater.quitAndInstall();
       }
     });
@@ -52,7 +53,7 @@ const setUpAutoUpdate = () => {
     Emitter.on('update:wait', () => {
       setTimeout(() => {
         Emitter.sendToAll('update:available');
-      }, 1200000);
+      }, 1000 * 60 * 60 * 24);
     });
 
     autoUpdater.checkForUpdates();

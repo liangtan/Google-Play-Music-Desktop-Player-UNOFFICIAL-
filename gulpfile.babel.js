@@ -2,61 +2,83 @@
 
 import gulp from 'gulp';
 
+import { spawn, exec } from 'child_process';
 import _ from 'lodash';
 import babel from 'gulp-babel';
 import clean from 'gulp-clean';
 import concat from 'gulp-concat';
 import cssmin from 'gulp-cssmin';
-import { createWindowsInstaller as electronInstaller } from 'electron-winstaller';
+import { createWindowsInstaller as electronInstaller } from 'gpmdp-electron-winstaller';
+import fs from 'fs';
+import globber from 'glob';
 import header from 'gulp-header';
 import less from 'gulp-less';
 import packager from 'electron-packager';
-import rebuild from './vendor/rebuild';
+import nodePath from 'path';
 import replace from 'gulp-replace';
 import runSequence from 'run-sequence';
-import uglify from 'gulp-uglify';
-
-import { spawn, exec } from 'child_process';
+import electronWindowsStore from 'electron-windows-store';
+// import uglify from 'gulp-uglify';
+import rebuild from 'electron-rebuild';
+import rasterImages from './vendor/svg_raster';
 
 const paths = {
   internalScripts: ['src/**/*.js'],
-  utilityScripts: ['node_modules/jquery/dist/jquery.min.js',
-                    'node_modules/materialize-css/dist/js/materialize.min.js',
-                    'node_modules/materialize-css/extras/noUiSlider/nouislider.min.js'],
   html: 'src/public_html/**/*.html',
   less: 'src/assets/less/**/*.less',
-  fonts: ['node_modules/materialize-css/dist/font/**/*',
+  fonts: ['node_modules/materialize-css/dist/fonts/**/*',
           '!node_modules/materialize-css/dist/font/material-design-icons/*',
           'node_modules/material-design-icons-iconfont/dist/fonts/**/*'],
-  images: ['src/assets/icons/**/*', 'src/assets/img/**/*'],
+  images: ['src/assets/img/**/*', 'src/assets/icons/*'],
   locales: ['src/_locales/*.json'],
 };
 
 const packageJSON = require('./package.json');
-let version = packageJSON.dependencies['electron-prebuilt'];
+
+let version = packageJSON.dependencies.electron;
 if (version.substr(0, 1) !== '0' && version.substr(0, 1) !== '1') {
   version = version.substr(1);
 }
 
 const defaultPackageConf = {
-  'app-bundle-id': packageJSON.name,
-  'app-category-type': 'public.app-category.music',
-  'app-copyright': `Copyright © ${(new Date()).getFullYear()} ${packageJSON.author.name}, All rights reserved.`, // eslint-disable-line
-  'app-version': packageJSON.version,
+  appBundleId: packageJSON.name,
+  appCategoryType: 'public.app-category.music',
+  appCopyright: `Copyright © ${(new Date()).getFullYear()} ${packageJSON.author.name}, All rights reserved.`, // eslint-disable-line
+  appVersion: packageJSON.version,
+  afterCopy: [
+    (buildPath, electronVersion, pPlatform, pArch, done) => rebuild(buildPath, electronVersion, pArch).then(() => done()).catch(done),
+    (buildPath, electronVersion, pPlatform, pArch, done) => {
+      const files = globber.sync(nodePath.resolve(buildPath, '**', '*.pdb'))
+        .concat(globber.sync(nodePath.resolve(buildPath, '**', '*.obj')))
+        .concat(globber.sync(nodePath.resolve(buildPath, '**', '.bin', '**', '*')));
+      files.forEach(filePath => fs.unlinkSync(filePath));
+      done();
+    },
+  ],
   arch: 'all',
-  'build-version': packageJSON.version,
-  dir: '.',
+  asar: true,
+  buildVersion: packageJSON.version,
+  dir: __dirname,
   icon: './build/assets/img/main',
   ignore: (path) => {
     const tests = [
       // Ignore git directory
       () => /^\/\.git\/.*/g,
-      // Ignore electron-prebuilt
-      () => /^\/node_modules\/electron-prebuilt\//g,
+      // Ignore uwp directory
+      () => /^\/\uwp\/.*/g,
+      // Ignore electron-packager on Docker machines
+      () => /^\/electron-packager\//g,
+      // Ignore electron
+      () => /^\/node_modules\/electron\//g,
+      () => /^\/node_modules\/electron$/g,
       // Ignore debug files
       () => /^\/node_modules\/.*\.pdb/g,
       // Ignore native module obj files
       () => /^\/node_modules\/.*\.obj/g,
+      // Ignore optional dev modules
+      () => /^\/node_modules\/appdmg/g,
+      () => /^\/node_modules\/electron-installer-debian/g,
+      () => /^\/node_modules\/electron-installer-redhat/g,
       // Ignore symlinks in the bin directory
       () => /^\/node_modules\/.bin/g,
       // Ignore root dev FileDescription
@@ -74,8 +96,8 @@ const defaultPackageConf = {
   overwrite: true,
   platform: 'all',
   prune: true,
-  version,
-  'version-string': {
+  electronVersion: version,
+  win32metadata: {
     CompanyName: packageJSON.author.name,
     FileDescription: packageJSON.productName,
     ProductName: packageJSON.productName,
@@ -99,39 +121,73 @@ const winstallerConfig = {
   iconUrl: 'https://www.samuelattard.com/img/gpmdp_setup.ico',
   setupIcon: 'build/assets/img/main.ico',
   loadingGif: 'build/assets/img/installing.gif',
-  remoteReleases: 'https://github.com/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-',
 };
 
-const cleanGlob = (glob) => {
+if (!process.env.GPMDP_DONT_BUILD_DELTAS) {
+  winstallerConfig.remoteReleases = 'https://github.com/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-';
+}
+
+if (process.env.APPVEYOR) {
+  delete winstallerConfig.remoteReleases;
+}
+
+const appdmgConf = {
+  target: `dist/${packageJSON.productName}-darwin-x64/${packageJSON.productName}.dmg`,
+  basepath: __dirname,
+  specification: {
+    title: 'GPMDP',
+    icon: `${defaultPackageConf.icon}.icns`,
+    background: 'src/assets/img/dmg.png',
+    window: {
+      size: {
+        width: 600,
+        height: 400,
+      },
+    },
+    contents: [
+      {
+        x: 490, y: 252, type: 'link', path: '/Applications',
+      },
+      {
+        x: 106, y: 252, type: 'file', path: `dist/${packageJSON.productName}-darwin-x64/${packageJSON.productName}.app`,
+      },
+    ],
+  },
+};
+
+const cleanGlob = (glob, allowSkip) => {
+  if (allowSkip && process.env.GPMDP_SKIP_PACKAGE) return;
   return () => {
     return gulp.src(glob, { read: false })
       .pipe(clean({ force: true }));
   };
 };
 
+const windowsSignFile = (filePath, signDigest) =>
+  new Promise((resolve) => {
+    console.log(`Signing file: "${filePath}"\nWith digest: ${signDigest}`);
+    exec(
+      `vendor\\signtool sign /f ".cert.pfx" /p ${process.env.SIGN_CERT_PASS} /td ${signDigest} /fd ${signDigest} /tr "http://timestamp.digicert.com" /v /as "${filePath}"`,
+      {},
+      () => {
+        setTimeout(() => {
+          setTimeout(resolve, 500);
+        });
+      }
+    );
+  });
+
 gulp.task('clean', cleanGlob(['./build', './dist']));
 gulp.task('clean-dist-win', cleanGlob(`./dist/${packageJSON.productName}-win32-ia32`));
 gulp.task('clean-dist-darwin', cleanGlob(`./dist/${packageJSON.productName}-darwin-ia32`));
-gulp.task('clean-dist-linux-32', cleanGlob(`./dist/${packageJSON.productName}-linux-ia32`));
-gulp.task('clean-dist-linux-64', cleanGlob(`./dist/${packageJSON.productName}-linux-x64`));
-gulp.task('clean-material', cleanGlob('./build/assets/material'));
-gulp.task('clean-utility', cleanGlob('./build/assets/util'));
+gulp.task('clean-dist-linux-32', cleanGlob(`./dist/${packageJSON.productName}-linux-ia32`, true));
+gulp.task('clean-dist-linux-64', cleanGlob(`./dist/${packageJSON.productName}-linux-x64`, true));
 gulp.task('clean-html', cleanGlob('./build/public_html'));
 gulp.task('clean-internal', cleanGlob(['./build/*.js', './build/**/*.js', '!./build/assets/**/*']));
 gulp.task('clean-fonts', cleanGlob('./build/assets/fonts'));
 gulp.task('clean-less', cleanGlob('./build/assets/css'));
 gulp.task('clean-images', cleanGlob('./build/assets/img'));
 gulp.task('clean-locales', cleanGlob('./build/_locales/*.json'));
-
-gulp.task('materialize-js', ['clean-material'], () => {
-  return gulp.src('node_modules/materialize-css/dist/js/materialize.min.js')
-    .pipe(gulp.dest('./build/assets/material'));
-});
-
-gulp.task('utility-js', ['clean-utility'], () => {
-  return gulp.src(paths.utilityScripts)
-    .pipe(gulp.dest('./build/assets/util'));
-});
 
 gulp.task('html', ['clean-html'], () => {
   return gulp.src(paths.html)
@@ -142,8 +198,8 @@ gulp.task('transpile', ['clean-internal'], () => {
   return gulp.src(paths.internalScripts)
     .pipe(babel())
     .on('error', (err) => { console.error(err); }) // eslint-disable-line
-    .pipe(replace(/process\.env\.(.+);/gi, (envCall, envKey) => {
-      return `'${process.env[envKey]}'`;
+    .pipe(replace(/process\.env\.([a-zA-Z_]+)?( |,|;|\))/gi, (envCall, envKey, closer) => {
+      return `'${process.env[envKey]}'${closer}`;
     }))
     .pipe(gulp.dest('./build/'));
 });
@@ -168,14 +224,18 @@ gulp.task('less', ['clean-less'], () => {
 });
 
 // Copy all static images
-gulp.task('images', ['clean-images'], () => {
+gulp.task('copy-static-images', ['clean-images'], () => {
   return gulp.src(paths.images)
     .pipe(gulp.dest('./build/assets/img/'));
 });
 
+gulp.task('images', ['copy-static-images'], (done) => {
+  rasterImages(done);
+});
+
 gulp.task('build-release', ['build'], () => {
   return gulp.src('./build/**/*.js')
-    .pipe(uglify())
+    // .pipe(uglify())
     .pipe(header(
 `/*!
 ${packageJSON.productName}
@@ -199,37 +259,55 @@ gulp.task('watch', ['build'], () => {
 });
 
 gulp.task('package:win', ['clean-dist-win', 'build-release'], (done) => {
-  console.log('Rebuilding ll-keyboard-hook-win'); // eslint-disable-line
-  rebuild('rebuild_ia32.bat')
-    .then(() => {
-      packager(_.extend({}, defaultPackageConf, { platform: 'win32', arch: 'ia32' }), () => {
-        setTimeout(() => {
-          exec(`vendor\\signtool sign /f ".cert.pfx" /p ${process.env.SIGN_CERT_PASS} /fd sha1 /tr "http://timestamp.geotrust.com/tsa" /v /as "dist/${packageJSON.productName}-win32-ia32/${packageJSON.productName}.exe"`, {}, () => {
-            exec(`vendor\\signtool sign /f ".cert.pfx" /p ${process.env.SIGN_CERT_PASS} /fd sha256 /tr "http://timestamp.geotrust.com/tsa" /v /as "dist/${packageJSON.productName}-win32-ia32/${packageJSON.productName}.exe"`, {}, () => {
-              done();
-            });
-          });
-        }, 1000);
-      });
-    });
+  packager(_.extend({}, defaultPackageConf, { platform: 'win32', arch: 'ia32' }), (err) => {
+    if (err) return done(err);
+    setTimeout(() => {
+      const packageExePath = `dist/${packageJSON.productName}-win32-ia32/${packageJSON.productName}.exe`;
+      windowsSignFile(packageExePath, 'sha1')
+      .then(() => windowsSignFile(packageExePath, 'sha256'))
+      .then(() => done());
+    }, 1000);
+  });
 });
 
 gulp.task('make:win', ['package:win'], (done) => {
   electronInstaller(winstallerConfig)
     .then(() => {
-      exec(`vendor\\signtool sign /f ".cert.pfx" /p ${process.env.SIGN_CERT_PASS} /fd sha1 /tr "http://timestamp.geotrust.com/tsa" /v /as "dist/win32/${packageJSON.productName}Setup.exe"`, {}, () => {
-        exec(`vendor\\signtool sign /f ".cert.pfx" /p ${process.env.SIGN_CERT_PASS} /fd sha256 /tr "http://timestamp.geotrust.com/tsa" /v /as "dist/win32/${packageJSON.productName}Setup.exe"`, {}, () => {
-          done();
-        });
-      });
-    });
+      const installerExePath = `dist/installers/win32/${packageJSON.productName}Setup.exe`;
+      windowsSignFile(installerExePath, 'sha1')
+      .then(() => windowsSignFile(installerExePath, 'sha256'))
+      .then(() => done());
+    })
+    .catch((err) => done(err));
+});
+
+gulp.task('make:win:uwp', ['package:win'], (done) => {
+  electronWindowsStore({
+    containerVirtualization: false,
+    inputDirectory: nodePath.resolve(__dirname, `dist/${packageJSON.productName}-win32-ia32`),
+    outputDirectory: nodePath.resolve(__dirname, 'dist/uwp'),
+    flatten: true,
+    packageVersion: `${packageJSON.version}.0`,
+    packageName: 'GPMDP',
+    packageDisplayName: 'GPMDP',
+    packageDescription: packageJSON.description,
+    packageExecutable: `app\\${packageJSON.productName}.exe`,
+    publisher: 'CN=E800FCD7-1562-414E-A4AC-F1BA78F4A060',
+    publisherDisplayName: 'Samuel Attard',
+    assets: 'build\\assets\\img\\assets',
+    devCert: nodePath.resolve(__dirname, '.uwp.pfx'),
+    signtoolParams: ['/p', process.env.SIGN_CERT_PASS],
+    finalSay: () => new Promise((resolve) => {
+      const manifestPath = nodePath.resolve(__dirname, 'dist/uwp/pre-appx/appxmanifest.xml');
+      const manifest = fs.readFileSync(manifestPath, 'utf8').replace('<Identity Name="GPMDP"', '<Identity Name="24619SamuelAttard.GPMDP"');
+      fs.writeFileSync(manifestPath, manifest);
+      resolve();
+    }),
+  }).then(() => done()).catch(done);
 });
 
 gulp.task('package:darwin', ['clean-dist-darwin', 'build-release'], (done) => {
-  rebuild('./rebuild_null.sh')
-    .then(() => {
-      packager(_.extend({}, defaultPackageConf, { platform: 'darwin', 'osx-sign': { identity: 'Developer ID Application: Samuel Attard (S7WPQ45ZU2)' } }), done); // eslint-disable-line
-    });
+  packager(_.extend({}, defaultPackageConf, { platform: 'darwin', osxSign: { identity: 'Developer ID Application: Samuel Attard (S7WPQ45ZU2)' } }), done); // eslint-disable-line
 });
 
 gulp.task('make:darwin', ['package:darwin'], (done) => {
@@ -241,30 +319,35 @@ gulp.task('make:darwin', ['package:darwin'], (done) => {
 
   console.log(`Zipping "${packageJSON.productName}.app"`); // eslint-disable-line
 
-  child.stdout.on('data', (data) => { process.stdout.write(data.toString()); });
+  child.stdout.on('data', () => {});
 
-  child.stderr.on('data', (data) => {
-    process.stdout.write(data.toString());
-  });
+  child.stderr.on('data', () => {});
 
   child.on('close', (code) => {
     console.log('Finished zipping with code ' + code); // eslint-disable-line
+
     done();
   });
 });
 
+gulp.task('dmg:darwin', ['package:darwin'], (done) => {
+  if (fs.existsSync(nodePath.resolve(__dirname, appdmgConf.target))) {
+    fs.unlinkSync(nodePath.resolve(__dirname, appdmgConf.target));
+  }
+  const dmg = require('appdmg')(appdmgConf);
+
+  dmg.on('finish', () => done());
+  dmg.on('error', done);
+});
+
 gulp.task('package:linux:32', ['clean-dist-linux-32', 'build-release'], (done) => {
-  rebuild('./rebuild_ia32.sh')
-    .then(() => {
-      packager(_.extend({}, defaultPackageConf, { platform: 'linux', arch: 'ia32' }), done);
-    });
+  if (process.env.GPMDP_SKIP_PACKAGE) return done();
+  packager(_.extend({}, defaultPackageConf, { platform: 'linux', arch: 'ia32' }), done);
 });
 
 gulp.task('package:linux:64', ['clean-dist-linux-64', 'build-release'], (done) => {
-  rebuild('./rebuild.sh')
-    .then(() => {
-      packager(_.extend({}, defaultPackageConf, { platform: 'linux', arch: 'x64' }), done);
-    });
+  if (process.env.GPMDP_SKIP_PACKAGE) return done();
+  packager(_.extend({}, defaultPackageConf, { platform: 'linux', arch: 'x64' }), done);
 });
 
 gulp.task('package:linux', (done) => {
@@ -283,6 +366,7 @@ const generateGulpLinuxDistroTask = (prefix, name, arch) => {
       homepage: packageJSON.homepage,
       icon: 'build/assets/img/main.png',
       categories: ['AudioVideo', 'Audio'],
+      section: 'sound',
     };
 
     let pkgArch = 'i386';
@@ -321,12 +405,10 @@ const zipTask = (makeName, deps, cwd, what) => {
     console.log(`Zipping ${what}`); // eslint-disable-line
 
     // spit stdout to screen
-    child.stdout.on('data', (data) => { process.stdout.write(data.toString()); });
+    child.stdout.on('data', () => {});
 
     // Send stderr to the main console
-    child.stderr.on('data', (data) => {
-      process.stdout.write(data.toString());
-    });
+    child.stderr.on('data', () => {});
 
     child.on('close', (code) => {
       console.log(`Finished zipping ${what} with code: ${code}`); // eslint-disable-line
@@ -345,6 +427,5 @@ zipTask('linux:rpm', ['rpm:linux'], './dist/installers/redhat', 'the Redhat (Fed
 
 // The default task (called when you run `gulp` from cli)
 gulp.task('default', ['watch', 'transpile', 'images']);
-gulp.task('build', ['materialize-js', 'utility-js', 'transpile', 'images', 'less',
-                    'fonts', 'html', 'locales']);
+gulp.task('build', ['transpile', 'images', 'less', 'fonts', 'html', 'locales']);
 gulp.task('package', ['package:win', 'package:darwin', 'package:linux']);

@@ -1,25 +1,27 @@
-import fs from 'fs';
-import createJSON from './_jsonCreator';
 import _ from 'lodash';
+import EventEmitter from 'events';
+import fs from 'fs';
 
-class PlaybackAPI {
-  constructor() {
-    this.PATH = createJSON('playback');
+import createJSON from './_jsonCreator';
+
+class PlaybackAPI extends EventEmitter {
+  constructor(filePrefix = '') {
+    super();
+
+    this.PATH = createJSON(`${filePrefix}playback`);
     this.reset();
     this._save();
-    if (Settings.get('enableJSONApi', true)) {
+    if (Settings.get('enableJSON_API', true)) {
       // DEV: Handle windows users running as admin...
       fs.chmodSync(this.PATH, '777');
     }
-
-    this._ev = {};
 
     this._hook();
   }
 
   _hook() {
-    Emitter.on('change:song', (event, details) => {
-      this._setPlaybackSong(details.title, details.artist, details.album, details.art);
+    Emitter.on('change:track', (event, details) => {
+      this._setPlaybackSong(details.title, details.artist, details.album, details.albumArt);
     });
 
     Emitter.on('playback:isPlaying', this._setPlaying.bind(this, true));
@@ -27,6 +29,7 @@ class PlaybackAPI {
     Emitter.on('playback:isStopped', this._setPlaying.bind(this, false));
 
     Emitter.on('change:playback-time', (event, timeObj) => this._setTime(timeObj.current, timeObj.total));
+    Emitter.on('change:volume', (event, newVolume) => this._setVolume(newVolume));
     // we throttle this function because of a bug in gmusic.js
     // ratings are received multiple times here in a couple of ms
     // to avoid writing the file 5+ times we throttle it to 500ms max
@@ -36,6 +39,7 @@ class PlaybackAPI {
     Emitter.on('change:playlists', _.throttle((event, playlists) => this._setPlaylists(playlists)), 20);
     Emitter.on('change:queue', _.throttle((event, queue) => this._setQueue(queue)), 20);
     Emitter.on('change:search-results', _.throttle((event, results) => this._setResults(results)), 20);
+    Emitter.on('change:library', _.throttle((event, library) => this._setLibrary(library)), 20);
   }
 
   reset() {
@@ -58,6 +62,7 @@ class PlaybackAPI {
       songLyrics: null,
       shuffle: 'NO_SHUFFLE',
       repeat: 'NO_REPEAT',
+      volume: 50,
     };
     this._private_data = {
       playlists: [],
@@ -68,14 +73,30 @@ class PlaybackAPI {
         albums: [],
         tracks: [],
       },
+      library: {
+        albums: [],
+        artists: [],
+        tracks: [],
+      },
     };
     this._save();
   }
 
   _save() {
     if (Settings.get('enableJSON_API', true)) {
-      fs.writeFileSync(this.PATH, JSON.stringify(this.data, null, 4));
+      try {
+        fs.writeFileSync(this.PATH, JSON.stringify(this.data, null, 4));
+      } catch (e) {
+        if (this.saving) clearTimeout(this.saving);
+        this.saving = setTimeout(this._save.bind(this), 275);
+      }
+      if (this.saving) clearTimeout(this.saving);
     }
+  }
+
+  _setLibrary(library) {
+    this._private_data.library = library;
+    this._fire('change:library', this._private_data.library);
   }
 
   _setPlaying(isPlaying) {
@@ -92,9 +113,8 @@ class PlaybackAPI {
       album,
       albumArt: fullSizeAlbumArt,
     };
-    this._resetRating();
     this.data.songLyrics = null;
-    this._fire('change:song', this.data.song);
+    this._fire('change:track', this.data.song);
     this._fire('change:lyrics', this.data.songLyrics);
     this._save();
   }
@@ -114,11 +134,6 @@ class PlaybackAPI {
     this.data.rating.disliked = rating === '1';
     this._fire('change:rating', this.data.rating);
     this._save();
-  }
-
-  _resetRating() {
-    this.data.rating.liked = false;
-    this.data.rating.disliked = false;
   }
 
   _setPlaybackSongLyrics(lyricString) {
@@ -154,6 +169,12 @@ class PlaybackAPI {
     this._save();
   }
 
+  _setVolume(newVolume) {
+    this.data.volume = newVolume;
+    this._fire('change:volume', newVolume);
+    this._save();
+  }
+
   isPlaying() {
     return this.data.playing;
   }
@@ -178,6 +199,10 @@ class PlaybackAPI {
     return this.data.time;
   }
 
+  getLibrary() {
+    return this._private_data.library;
+  }
+
   getPlaylists() {
     return this._private_data.playlists;
   }
@@ -186,25 +211,20 @@ class PlaybackAPI {
     return this._private_data.queue;
   }
 
+  getRating() {
+    return this.data.rating;
+  }
+
   getResults() {
     return this._private_data.results;
   }
 
-  on(what, fn) {
-    this._ev[what] = this._ev[what] || [];
-    this._ev[what].push(fn);
-  }
-
-  unbind(what, fn) {
-    this._ev[what] = this._ev[what] || [];
-    this._ev[what] = this._ev[what].filter((testFn) => fn !== testFn);
+  getVolume() {
+    return this.data.volume;
   }
 
   _fire(what, arg) {
-    this._ev[what] = this._ev[what] || [];
-    this._ev[what].forEach((fn) => {
-      fn(arg);
-    });
+    this.emit(what, arg);
     Emitter.sendToWindowsOfName('main', `PlaybackAPI:${what}`, arg);
   }
 }

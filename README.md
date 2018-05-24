@@ -3,14 +3,17 @@ Google Play Music™ Desktop Player
 
 [![Join the chat at https://gitter.im/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 [![Github All Releases](https://img.shields.io/github/downloads/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-/total.svg)](https://github.com/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-/releases)
- [![GitHub version](https://badge.fury.io/gh/MarshallOfSound%2FGoogle-Play-Music-Desktop-Player-UNOFFICIAL-.svg)](https://badge.fury.io/gh/MarshallOfSound%2FGoogle-Play-Music-Desktop-Player-UNOFFICIAL-)  [![Code Climate](https://codeclimate.com/github/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-/badges/gpa.svg)](https://codeclimate.com/github/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-) <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=23CZGASL6XMLJ" title="Help me out by donating to this project"><img src="https://img.shields.io/badge/paypal-donate-yellow.svg" alt="PayPal donate button" /></a>  
+ [![GitHub version](https://badge.fury.io/gh/MarshallOfSound%2FGoogle-Play-Music-Desktop-Player-UNOFFICIAL-.svg)](https://badge.fury.io/gh/MarshallOfSound%2FGoogle-Play-Music-Desktop-Player-UNOFFICIAL-)
+ [![Code Climate](https://codeclimate.com/github/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-/badges/gpa.svg)](https://codeclimate.com/github/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-)
+ [![Coverage Status](https://coveralls.io/repos/github/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-/badge.svg)](https://coveralls.io/github/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-)
+ [![Average time to resolve an issue](http://isitmaintained.com/badge/resolution/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-.svg)](http://isitmaintained.com/project/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL- "Average time to resolve an issue")
+ <a href="https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=23CZGASL6XMLJ" title="Help me out by donating to this project"><img src="https://img.shields.io/badge/paypal-donate-yellow.svg" alt="PayPal donate button" /></a>  
  Windows: [![Build status](https://ci.appveyor.com/api/projects/status/clg5vclqyltff7hg/branch/master?svg=true)](https://ci.appveyor.com/project/MarshallOfSound/google-play-music-desktop-player-unofficial/branch/master)  
- Mac OS X: [![Build Status](https://travis-ci.org/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-.svg?branch=master)](https://travis-ci.org/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-)  
- Linux: [![Circle CI](https://circleci.com/gh/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-/tree/master.svg?style=svg)](https://circleci.com/gh/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-/tree/master)
+ MacOS / Linux: [![CircleCI](https://circleci.com/gh/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-/tree/master.svg?style=svg)](https://circleci.com/gh/MarshallOfSound/Google-Play-Music-Desktop-Player-UNOFFICIAL-/tree/master)
 
 ![](http://samuel.ninja/img/gpmdp_screen.gif)
 
-Run Google Play Music as a standalone desktop app.  Never again will you have to hunt through your tabs to pause your music, or stop listening to your favourite song because Chrome is guzzling up all your RAM..
+Run "Google Play Music" as a standalone desktop app.  Never again will you have to hunt through your tabs to pause your music, or stop listening to your favourite song because Chrome is guzzling up all your RAM..
 
 Developed by [Samuel Attard][1].
 
@@ -67,6 +70,12 @@ If you have any bugs / issues please check the
 first before raising an issue
 
 
+Credits
+-------
+
+[Logo](src/assets/icons/svg/vector_logo.svg) designed by @JayToe
+
+
 Development
 -----------
 
@@ -111,7 +120,7 @@ If you think you can add something cool or fix a problem, fork the repo and make
 
 Dev Requirements
 ----------------
-* Node.js (Recommend `4.4.x`)
+* Node.js (Recommend `6.3.x`)
 * NPM (3.x.x)
 
 Continuous Integration
